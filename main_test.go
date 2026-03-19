@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -47,4 +48,53 @@ func TestCafeWhenOk(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, response.Code)
 	}
+}
+
+func TestCafeCount(t *testing.T) {
+	cafeCount := func(city string) int {
+		ln := len(cafeList[city])
+		if ln < 100 {
+			return ln
+		}
+		return 100
+	}
+
+	requests := []struct {
+		city  string
+		count int
+		want  int
+	}{
+		{"moscow", 0, 0},
+		{"moscow", 1, 1},
+		{"moscow", 2, 2},
+		{"moscow", 100, cafeCount("moscow")},
+
+		{"tula", 0, 0},
+		{"tula", 1, 1},
+		{"tula", 2, 2},
+		{"tula", 100, cafeCount("tula")},
+	}
+
+	for _, test := range requests {
+		handler := http.HandlerFunc(mainHandle)
+		resp := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/cafe?city=%s&count=%d", test.city, test.count), nil)
+		handler.ServeHTTP(resp, req)
+		if test.want == 0 {
+			fmt.Println(len(strings.Split(strings.TrimSpace(resp.Body.String()), ",")))
+		}
+		coffeeCount := func() int {
+			cafeLst := strings.Split(strings.TrimSpace(resp.Body.String()), ",")
+			if cafeLst[0] == "" {
+				return 0
+			}
+			return len(cafeLst)
+		}()
+		assert.Equal(t, test.want, coffeeCount)
+	}
+
+}
+
+func TestCafeSearch(t *testing.T) {
+
 }
