@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCafeNegative(t *testing.T) {
@@ -46,5 +48,86 @@ func TestCafeWhenOk(t *testing.T) {
 		handler.ServeHTTP(response, req)
 
 		assert.Equal(t, http.StatusOK, response.Code)
+	}
+}
+
+func TestCafeCount(t *testing.T) {
+	cafeCount := func(city string) int {
+		ln := len(cafeList[city])
+		if ln < 100 {
+			return ln
+		}
+		return 100
+	}
+
+	requests := []struct {
+		city  string
+		count int
+		want  int
+	}{
+		{"moscow", 0, 0},
+		{"moscow", 1, 1},
+		{"moscow", 2, 2},
+		{"moscow", 100, cafeCount("moscow")},
+
+		{"tula", 0, 0},
+		{"tula", 1, 1},
+		{"tula", 2, 2},
+		{"tula", 100, cafeCount("tula")},
+	}
+
+	for _, test := range requests {
+		handler := http.HandlerFunc(mainHandle)
+		resp := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/cafe?city=%s&count=%d", test.city, test.count), nil)
+		handler.ServeHTTP(resp, req)
+		require.Equal(t, http.StatusOK, resp.Code)
+
+		coffeeCount := func() int {
+			cafeLst := strings.Split(strings.TrimSpace(resp.Body.String()), ",")
+			if cafeLst[0] == "" {
+				return 0
+			}
+			return len(cafeLst)
+		}()
+		assert.Equal(t, test.want, coffeeCount)
+	}
+
+}
+
+func TestCafeSearch(t *testing.T) {
+	requests := []struct {
+		search    string
+		wantCount int
+	}{
+		{"фасоль", 0},
+		{"кофе", 2},
+		{"вилка", 1},
+	}
+
+	for _, test := range requests {
+		handler := http.HandlerFunc(mainHandle)
+		resp := httptest.NewRecorder()
+		req := httptest.NewRequest(
+			http.MethodGet, fmt.Sprintf("/cafe?city=moscow&search=%s", test.search), nil,
+		)
+		handler.ServeHTTP(resp, req)
+		require.Equal(t, http.StatusOK, resp.Code)
+
+		cafeList := func() []string {
+			cafeList := strings.Split(strings.TrimSpace(resp.Body.String()), ",")
+			if cafeList[0] == "" {
+				return []string{}
+			}
+			return cafeList
+		}()
+
+		var actualCount int
+		for _, cafe := range cafeList {
+			if strings.Contains(strings.ToLower(cafe), test.search) {
+				actualCount++
+			}
+		}
+		assert.Equal(t, test.wantCount, actualCount)
 	}
 }
