@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCafeNegative(t *testing.T) {
@@ -80,9 +81,8 @@ func TestCafeCount(t *testing.T) {
 		resp := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/cafe?city=%s&count=%d", test.city, test.count), nil)
 		handler.ServeHTTP(resp, req)
-		if test.want == 0 {
-			fmt.Println(len(strings.Split(strings.TrimSpace(resp.Body.String()), ",")))
-		}
+		require.Equal(t, http.StatusOK, resp.Code)
+
 		coffeeCount := func() int {
 			cafeLst := strings.Split(strings.TrimSpace(resp.Body.String()), ",")
 			if cafeLst[0] == "" {
@@ -96,5 +96,38 @@ func TestCafeCount(t *testing.T) {
 }
 
 func TestCafeSearch(t *testing.T) {
+	requests := []struct {
+		search    string
+		wantCount int
+	}{
+		{"фасоль", 0},
+		{"кофе", 2},
+		{"вилка", 1},
+	}
 
+	for _, test := range requests {
+		handler := http.HandlerFunc(mainHandle)
+		resp := httptest.NewRecorder()
+		req := httptest.NewRequest(
+			http.MethodGet, fmt.Sprintf("/cafe?city=moscow&search=%s", test.search), nil,
+		)
+		handler.ServeHTTP(resp, req)
+		require.Equal(t, http.StatusOK, resp.Code)
+
+		cafeList := func() []string {
+			cafeList := strings.Split(strings.TrimSpace(resp.Body.String()), ",")
+			if cafeList[0] == "" {
+				return []string{}
+			}
+			return cafeList
+		}()
+
+		var actualCount int
+		for _, cafe := range cafeList {
+			if strings.Contains(strings.ToLower(cafe), test.search) {
+				actualCount++
+			}
+		}
+		assert.Equal(t, test.wantCount, actualCount)
+	}
 }
